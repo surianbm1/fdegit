@@ -1,0 +1,16 @@
+name: workspace-local-cloud
+services:
+  publisher:
+    build:
+      context: .
+      dockerfile: deploy/local-cloud.Dockerfile
+    ports: ["127.0.0.1:8090:8000"]
+    volumes: ["local-cloud-files:/data"]
+    restart: unless-stopped
+    healthcheck:
+      test: [CMD, python, -c, "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+volumes:
+  local-cloud-files:

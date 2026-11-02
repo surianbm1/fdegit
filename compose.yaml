@@ -1,0 +1,97 @@
+name: agent-workspace-manager
+x-app: &app
+  image: agent-workspace-manager:local
+  restart: unless-stopped
+  read_only: true
+  tmpfs: [/tmp]
+  cap_drop: [ALL]
+  security_opt: [no-new-privileges:true]
+  healthcheck:
+    test: [CMD, python, -c, "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=3)"]
+    interval: 5s
+    timeout: 4s
+    retries: 15
+    start_period: 10s
+
+services:
+  cloud:
+    <<: *app
+    build: .
+    environment:
+      AWM_NAME: cloud
+      AWM_WATCH: "1"
+    ports: ["127.0.0.1:8000:8000"]
+    volumes:
+      - cloud-data:/data
+      - ${AWM_RUNTIME_DIR:-./.runtime/docker}/secrets/cloud/credentials.json:/run/secrets/credentials.json:ro
+  regional-cache:
+    <<: *app
+    command: [python, -m, app.cache_server]
+    environment:
+      AWM_UPSTREAM: http://cloud:8000
+      AWM_CACHE_BYTES: "268435456"
+    ports: ["127.0.0.1:8010:8000"]
+    volumes:
+      - regional-cache-data:/data
+    depends_on:
+      cloud: {condition: service_healthy}
+  user1:
+    <<: *app
+    environment:
+      AWM_NAME: user1
+      AWM_CLOUD_URL: http://cloud:8000
+      AWM_OBJECT_URL: http://regional-cache:8000
+      AWM_WATCH: "1"
+    ports: ["127.0.0.1:8001:8000"]
+    volumes:
+      - user1-data:/data
+      - ${AWM_RUNTIME_DIR:-./.runtime/docker}/secrets/user1/credentials.json:/run/secrets/credentials.json:ro
+      - ${AWM_RUNTIME_DIR:-./.runtime/docker}/secrets/user1/cloud.token:/run/secrets/cloud.token:ro
+    depends_on:
+      cloud: {condition: service_healthy}
+  user2:
+    <<: *app
+    environment:
+      AWM_NAME: user2
+      AWM_CLOUD_URL: http://cloud:8000
+      AWM_OBJECT_URL: http://regional-cache:8000
+      AWM_WATCH: "1"
+    ports: ["127.0.0.1:8002:8000"]
+    volumes:
+      - user2-data:/data
+      - ${AWM_RUNTIME_DIR:-./.runtime/docker}/secrets/user2/credentials.json:/run/secrets/credentials.json:ro
+      - ${AWM_RUNTIME_DIR:-./.runtime/docker}/secrets/user2/cloud.token:/run/secrets/cloud.token:ro
+    depends_on:
+      cloud: {condition: service_healthy}
+  user3:
+    <<: *app
+    environment:
+      AWM_NAME: user3
+      AWM_CLOUD_URL: http://cloud:8000
+      AWM_OBJECT_URL: http://regional-cache:8000
+      AWM_WATCH: "1"
+    ports: ["127.0.0.1:8003:8000"]
+    volumes:
+      - user3-data:/data
+      - ${AWM_RUNTIME_DIR:-./.runtime/docker}/secrets/user3/credentials.json:/run/secrets/credentials.json:ro
+      - ${AWM_RUNTIME_DIR:-./.runtime/docker}/secrets/user3/cloud.token:/run/secrets/cloud.token:ro
+    depends_on:
+      cloud: {condition: service_healthy}
+  gateway:
+    image: caddy:2.10-alpine
+    ports: ["127.0.0.1:8443:8443"]
+    volumes:
+      - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    depends_on:
+      cloud: {condition: service_healthy}
+
+volumes:
+  cloud-data:
+  user1-data:
+  user2-data:
+  user3-data:
+  caddy-data:
+  caddy-config:
+  regional-cache-data:
